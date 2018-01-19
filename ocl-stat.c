@@ -3,6 +3,10 @@
 #include <dlfcn.h>
 #include <signal.h>
 
+#ifdef HAVE_LIBUNWIND
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>
+#endif
 
 typedef struct {
     guint refs;
@@ -73,6 +77,31 @@ dump_info (void)
         g_print ("Buffers memory leak: %zu\n", total_buffer_size (items_alive));
 
     G_UNLOCK (stat_data);
+}
+
+static void
+dump_trace (void)
+{
+#ifdef HAVE_LIBUNWIND
+    unw_context_t context;
+    unw_cursor_t cursor;
+
+    unw_getcontext (&context);
+    unw_init_local (&cursor, &context);
+
+    while (unw_step (&cursor) > 0) {
+        gchar name[129];
+        unw_word_t off;
+        int result;
+
+        result = unw_get_proc_name (&cursor, name, sizeof (name), &off);
+
+        if (result < 0)
+            break;
+
+        g_print ("  %s + [0x%08x]\n", name, (unsigned int) off);
+    }
+#endif
 }
 
 static void
@@ -179,8 +208,10 @@ clRetainContext (cl_context context)
 
     if (item != NULL)
         item->refs++;
-    else
-        g_warning ("Unknown context object");
+    else {
+        g_print ("clRetainContext: unknown context\n");
+        dump_trace ();
+    }
 
     G_UNLOCK (stat_data);
 
@@ -210,7 +241,8 @@ clReleaseContext (cl_context context)
         }
     }
     else {
-        g_warning ("clReleaseContext: unknown buffer object");
+        g_print ("clReleaseContext: unknown context\n");
+        dump_trace ();
     }
 
     G_UNLOCK (stat_data);
@@ -255,10 +287,13 @@ clRetainMemObject (cl_mem memobj)
 
     item = g_hash_table_lookup (stat_data_state.buffers, memobj);
 
-    if (item != NULL)
+    if (item != NULL) {
         item->refs++;
-    else
-        g_warning ("clRetainMemObject: unknown buffer object");
+    }
+    else {
+        g_print ("clRetainMemObject: unknown buffer object\n");
+        dump_trace ();
+    }
 
     G_UNLOCK (stat_data);
 
@@ -288,7 +323,8 @@ clReleaseMemObject (cl_mem memobj)
         }
     }
     else {
-        g_warning ("clReleaseMemObject: unknown buffer object");
+        g_print ("clReleaseMemObject: unknown buffer object %p\n", memobj);
+        dump_trace ();
     }
 
     G_UNLOCK (stat_data);
