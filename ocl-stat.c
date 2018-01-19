@@ -180,7 +180,7 @@ clRetainContext (cl_context context)
     if (item != NULL)
         item->refs++;
     else
-        g_error ("Unknown context object");
+        g_warning ("Unknown context object");
 
     G_UNLOCK (stat_data);
 
@@ -210,7 +210,7 @@ clReleaseContext (cl_context context)
         }
     }
     else {
-        g_error ("Unknown buffer object");
+        g_warning ("clReleaseContext: unknown buffer object");
     }
 
     G_UNLOCK (stat_data);
@@ -258,7 +258,7 @@ clRetainMemObject (cl_mem memobj)
     if (item != NULL)
         item->refs++;
     else
-        g_error ("Unknown buffer object");
+        g_warning ("clRetainMemObject: unknown buffer object");
 
     G_UNLOCK (stat_data);
 
@@ -288,7 +288,7 @@ clReleaseMemObject (cl_mem memobj)
         }
     }
     else {
-        g_error ("Unknown buffer object");
+        g_warning ("clReleaseMemObject: unknown buffer object");
     }
 
     G_UNLOCK (stat_data);
