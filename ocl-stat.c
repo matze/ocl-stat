@@ -51,30 +51,48 @@ total_buffer_size (GList *items)
 }
 
 static void
+dump_item (GHashTable *table, const gchar *name)
+{
+    GList *items;
+    GList *items_alive;
+    gchar *s;
+
+    items = g_hash_table_get_values (table);
+    items_alive = get_alive_items (items);
+
+    s = g_strdup_printf ("%-16s%i/%i\n", name, g_list_length (items_alive), g_list_length (items));
+    g_print (" %s", s);
+    g_free (s);
+
+    g_list_free (items);
+    g_list_free (items_alive);
+}
+
+static void
 dump_info (void)
 {
     GList *items;
     GList *items_alive;
 
+    g_print ("\nOpenCL objects alive\n"
+             "====================\n");
+
     G_LOCK (stat_data);
 
-    items = g_hash_table_get_values (stat_data_state.contexts);
-    items_alive = get_alive_items (items);
+    dump_item (stat_data_state.contexts, "Contexts");
+    dump_item (stat_data_state.queues, "Command queues");
+    dump_item (stat_data_state.buffers, "Buffers");
 
-    g_print ("Contexts created: %i\n", g_list_length (items));
-    g_print ("Contexts alive: %i\n", g_list_length (items_alive));
-
-    g_list_free (items);
-    g_list_free (items_alive);
+    g_print ("\nMemory leaks\n"
+             "============\n");
 
     items = g_hash_table_get_values (stat_data_state.buffers);
     items_alive = get_alive_items (items);
 
-    g_print ("Buffers created: %i\n", g_list_length (items));
-    g_print ("Buffers alive: %i\n", g_list_length (items_alive));
+    g_print (" %-16s%zu B\n", "Leaking", total_buffer_size (items_alive));
 
-    if (g_list_length (items_alive) > 0)
-        g_print ("Buffers memory leak: %zu\n", total_buffer_size (items_alive));
+    g_list_free (items);
+    g_list_free (items_alive);
 
     G_UNLOCK (stat_data);
 }
@@ -201,7 +219,7 @@ clRetainContext (cl_context context)
 
     clRetainContextReal = get_func ("clRetainContext");
     ret = clRetainContextReal (context);
-    
+
     G_LOCK (stat_data);
 
     item = g_hash_table_lookup (stat_data_state.contexts, context);
@@ -227,18 +245,13 @@ clReleaseContext (cl_context context)
 
     clReleaseContextReal = get_func ("clReleaseContext");
     ret = clReleaseContextReal (context);
-    
+
     G_LOCK (stat_data);
 
     item = g_hash_table_lookup (stat_data_state.contexts, context);
 
     if (item != NULL) {
         item->refs--;
-
-        if (item->refs == 0) {
-            g_hash_table_remove (stat_data_state.contexts, item->obj);
-            g_free (item);
-        }
     }
     else {
         g_print ("clReleaseContext: unknown context\n");
@@ -361,7 +374,7 @@ clRetainMemObject (cl_mem memobj)
 
     clRetainMemObjectReal = get_func ("clRetainMemObject");
     ret = clRetainMemObjectReal (memobj);
-    
+
     G_LOCK (stat_data);
 
     item = g_hash_table_lookup (stat_data_state.buffers, memobj);
@@ -388,18 +401,13 @@ clReleaseMemObject (cl_mem memobj)
 
     clReleaseMemObjectReal = get_func ("clReleaseMemObject");
     ret = clReleaseMemObjectReal (memobj);
-    
+
     G_LOCK (stat_data);
 
     item = g_hash_table_lookup (stat_data_state.buffers, memobj);
 
     if (item != NULL) {
         item->refs--;
-
-        if (item->refs == 0) {
-            g_hash_table_remove (stat_data_state.buffers, item->obj);
-            g_free (item);
-        }
     }
     else {
         g_print ("clReleaseMemObject: unknown buffer object %p\n", memobj);
