@@ -18,6 +18,8 @@ typedef struct {
     GHashTable *contexts;
     GHashTable *queues;
     GHashTable *buffers;
+    GHashTable *samplers;
+    GHashTable *kernels;
 } StatData;
 
 static volatile StatData stat_data_state = { NULL, };
@@ -82,6 +84,8 @@ dump_info (void)
     dump_item (stat_data_state.contexts, "Contexts");
     dump_item (stat_data_state.queues, "Command queues");
     dump_item (stat_data_state.buffers, "Buffers");
+    dump_item (stat_data_state.samplers, "Samplers");
+    dump_item (stat_data_state.kernels, "Kernels");
 
     g_print ("\nMemory leaks\n"
              "============\n");
@@ -164,6 +168,8 @@ get_func (const char *name)
         stat_data_state.contexts = g_hash_table_new (NULL, NULL);
         stat_data_state.queues = g_hash_table_new (NULL, NULL);
         stat_data_state.buffers = g_hash_table_new (NULL, NULL);
+        stat_data_state.samplers = g_hash_table_new (NULL, NULL);
+        stat_data_state.kernels = g_hash_table_new (NULL, NULL);
 
         signal (SIGUSR1, _sig_usr1_handler);
         signal (SIGINT, _sig_usr1_handler);
@@ -263,6 +269,81 @@ clReleaseContext (cl_context context)
     return ret;
 }
 
+cl_command_queue
+clCreateCommandQueue (cl_context context,
+                      cl_device_id device,
+                      cl_command_queue_properties properties,
+                      cl_int *errcode_ret)
+{
+    cl_command_queue queue;
+    StatItem *item;
+    cl_command_queue (* clCreateCommandQueueReal) (cl_context, cl_device_id, cl_command_queue_properties, cl_int *);
+
+    clCreateCommandQueueReal = get_func ("clCreateCommandQueue");
+    queue = clCreateCommandQueueReal (context, device, properties, errcode_ret);
+    item = stat_item_new (queue);
+
+    G_LOCK (stat_data);
+    g_hash_table_insert (stat_data_state.queues, queue, item);
+    G_UNLOCK (stat_data);
+
+    return queue;
+}
+
+cl_int
+clRetainCommandQueue (cl_command_queue command_queue)
+{
+    cl_int ret;
+    cl_int (* clRetainCommandQueueReal) (cl_command_queue);
+    StatItem *item;
+
+    clRetainCommandQueueReal = get_func ("clRetainCommandQueue");
+    ret = clRetainCommandQueueReal (command_queue);
+
+    G_LOCK (stat_data);
+
+    item = g_hash_table_lookup (stat_data_state.queues, command_queue);
+
+    if (item != NULL) {
+        item->refs++;
+    }
+    else {
+        g_print ("clRetainCommandQueue: unknown command queue\n");
+        dump_trace ();
+    }
+
+    G_UNLOCK (stat_data);
+
+    return ret;
+}
+
+cl_int
+clReleaseCommandQueue (cl_command_queue command_queue)
+{
+    cl_int ret;
+    cl_int (* clReleaseCommandQueueReal) (cl_command_queue);
+    StatItem *item;
+
+    clReleaseCommandQueueReal = get_func ("clReleaseCommandQueue");
+    ret = clReleaseCommandQueueReal (command_queue);
+
+    G_LOCK (stat_data);
+
+    item = g_hash_table_lookup (stat_data_state.queues, command_queue);
+
+    if (item != NULL) {
+        item->refs--;
+    }
+    else {
+        g_print ("clReleaseCommandQueue: unknown command queue %p\n", command_queue);
+        dump_trace ();
+    }
+
+    G_UNLOCK (stat_data);
+
+    return ret;
+}
+
 cl_mem
 clCreateBuffer (cl_context context,
                 cl_mem_flags flags,
@@ -302,7 +383,6 @@ clCreateImage (cl_context context,
     buffer = clCreateImageReal (context, flags, image_format, image_desc, host_ptr, errcode_ret);
     item = stat_item_new (buffer);
     item->size = 1; /* FIXME: compute correct size */
-    g_print ("inserting %p\n", buffer);
 
     G_LOCK (stat_data);
     g_hash_table_insert (stat_data_state.buffers, buffer, item);
@@ -411,6 +491,156 @@ clReleaseMemObject (cl_mem memobj)
     }
     else {
         g_print ("clReleaseMemObject: unknown buffer object %p\n", memobj);
+        dump_trace ();
+    }
+
+    G_UNLOCK (stat_data);
+
+    return ret;
+}
+
+cl_sampler
+clCreateSampler (cl_context context,
+                 cl_bool normalized_coords,
+                 cl_addressing_mode addressing_mode,
+                 cl_filter_mode filter_mode,
+                 cl_int *errcode_ret)
+{
+    cl_sampler sampler;
+    StatItem *item;
+    cl_sampler (* clCreateSamplerReal) (cl_context, cl_bool, cl_addressing_mode, cl_filter_mode, cl_int *);
+
+    clCreateSamplerReal = get_func ("clCreateSampler");
+    sampler = clCreateSamplerReal (context, normalized_coords, addressing_mode, filter_mode, errcode_ret);
+    item = stat_item_new (sampler);
+
+    G_LOCK (stat_data);
+    g_hash_table_insert (stat_data_state.samplers, sampler, item);
+    G_UNLOCK (stat_data);
+
+    return sampler;
+}
+
+cl_int
+clRetainSampler (cl_sampler sampler)
+{
+    cl_int ret;
+    cl_int (* clRetainSamplerReal) (cl_sampler);
+    StatItem *item;
+
+    clRetainSamplerReal = get_func ("clRetainSampler");
+    ret = clRetainSamplerReal (sampler);
+
+    G_LOCK (stat_data);
+
+    item = g_hash_table_lookup (stat_data_state.samplers, sampler);
+
+    if (item != NULL) {
+        item->refs++;
+    }
+    else {
+        g_print ("clRetainSampler: unknown sampler\n");
+        dump_trace ();
+    }
+
+    G_UNLOCK (stat_data);
+
+    return ret;
+}
+
+cl_int
+clReleaseSampler (cl_sampler sampler)
+{
+    cl_int ret;
+    cl_int (* clReleaseSamplerReal) (cl_sampler);
+    StatItem *item;
+
+    clReleaseSamplerReal = get_func ("clReleaseSampler");
+    ret = clReleaseSamplerReal (sampler);
+
+    G_LOCK (stat_data);
+
+    item = g_hash_table_lookup (stat_data_state.samplers, sampler);
+
+    if (item != NULL) {
+        item->refs--;
+    }
+    else {
+        g_print ("clReleaseSampler: unknown sampler %p\n", sampler);
+        dump_trace ();
+    }
+
+    G_UNLOCK (stat_data);
+
+    return ret;
+}
+
+cl_kernel
+clCreateKernel (cl_program program,
+                const char *kernel_name,
+                cl_int *errcode_ret)
+{
+    cl_kernel kernel;
+    StatItem *item;
+    cl_kernel (* clCreateKernelReal) (cl_program, const char *, cl_int *);
+
+    clCreateKernelReal = get_func ("clCreateKernel");
+    kernel = clCreateKernelReal (program, kernel_name, errcode_ret);
+    item = stat_item_new (kernel);
+
+    G_LOCK (stat_data);
+    g_hash_table_insert (stat_data_state.kernels, kernel, item);
+    G_UNLOCK (stat_data);
+
+    return kernel;
+}
+
+cl_int
+clRetainKernel (cl_kernel kernel)
+{
+    cl_int ret;
+    cl_int (* clRetainKernelReal) (cl_kernel);
+    StatItem *item;
+
+    clRetainKernelReal = get_func ("clRetainKernel");
+    ret = clRetainKernelReal (kernel);
+
+    G_LOCK (stat_data);
+
+    item = g_hash_table_lookup (stat_data_state.kernels, kernel);
+
+    if (item != NULL) {
+        item->refs++;
+    }
+    else {
+        g_print ("clRetainKernel: unknown kernel\n");
+        dump_trace ();
+    }
+
+    G_UNLOCK (stat_data);
+
+    return ret;
+}
+
+cl_int
+clReleaseKernel (cl_kernel kernel)
+{
+    cl_int ret;
+    cl_int (* clReleaseKernelReal) (cl_kernel);
+    StatItem *item;
+
+    clReleaseKernelReal = get_func ("clReleaseKernel");
+    ret = clReleaseKernelReal (kernel);
+
+    G_LOCK (stat_data);
+
+    item = g_hash_table_lookup (stat_data_state.kernels, kernel);
+
+    if (item != NULL) {
+        item->refs--;
+    }
+    else {
+        g_print ("clReleaseKernel: unknown kernel %p\n", kernel);
         dump_trace ();
     }
 
