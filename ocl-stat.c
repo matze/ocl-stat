@@ -119,6 +119,10 @@ get_func (const char *name)
         stat_data_state.buffers = g_hash_table_new (NULL, NULL);
 
         signal (SIGUSR1, _sig_usr1_handler);
+        signal (SIGINT, _sig_usr1_handler);
+        signal (SIGTERM, _sig_usr1_handler);
+        signal (SIGABRT, _sig_usr1_handler);
+        signal (SIGSEGV, _sig_usr1_handler);
 
         atexit (_exit_handler);
 
