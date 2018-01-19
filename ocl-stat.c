@@ -273,6 +273,85 @@ clCreateBuffer (cl_context context,
     return buffer;
 }
 
+cl_mem
+clCreateImage (cl_context context,
+               cl_mem_flags flags,
+               const cl_image_format *image_format,
+               const cl_image_desc *image_desc,
+               void *host_ptr,
+               cl_int *errcode_ret)
+{
+    cl_mem buffer;
+    StatItem *item;
+    cl_mem (* clCreateImageReal) (cl_context, cl_mem_flags, const cl_image_format *, const cl_image_desc *, void *, cl_int *);
+
+    clCreateImageReal = get_func ("clCreateImage");
+    buffer = clCreateImageReal (context, flags, image_format, image_desc, host_ptr, errcode_ret);
+    item = stat_item_new (buffer);
+    item->size = 1; /* FIXME: compute correct size */
+    g_print ("inserting %p\n", buffer);
+
+    G_LOCK (stat_data);
+    g_hash_table_insert (stat_data_state.buffers, buffer, item);
+    G_UNLOCK (stat_data);
+
+    return buffer;
+}
+
+cl_mem
+clCreateImage2D (cl_context context,
+                 cl_mem_flags flags,
+                 const cl_image_format *image_format,
+                 size_t image_width,
+                 size_t image_height,
+                 size_t image_row_pitch,
+                 void *host_ptr,
+                 cl_int *errcode_ret)
+{
+    cl_mem buffer;
+    StatItem *item;
+    cl_mem (* clCreateImage2DReal) (cl_context, cl_mem_flags, const cl_image_format *, size_t, size_t, size_t, void *, cl_int *);
+
+    clCreateImage2DReal = get_func ("clCreateImage2D");
+    buffer = clCreateImage2DReal (context, flags, image_format, image_width, image_height, image_row_pitch, host_ptr, errcode_ret);
+    item = stat_item_new (buffer);
+    item->size = image_width * image_height; /* FIXME: compute correct size */
+
+    G_LOCK (stat_data);
+    g_hash_table_insert (stat_data_state.buffers, buffer, item);
+    G_UNLOCK (stat_data);
+
+    return buffer;
+}
+
+cl_mem
+clCreateImage3D (cl_context context,
+                 cl_mem_flags flags,
+                 const cl_image_format *image_format,
+                 size_t image_width,
+                 size_t image_height,
+                 size_t image_depth,
+                 size_t image_row_pitch,
+                 size_t image_slice_pitch,
+                 void *host_ptr,
+                 cl_int *errcode_ret)
+{
+    cl_mem buffer;
+    StatItem *item;
+    cl_mem (* clCreateImage2DReal) (cl_context, cl_mem_flags, const cl_image_format *, size_t, size_t, size_t, size_t, size_t, void *, cl_int *);
+
+    clCreateImage2DReal = get_func ("clCreateImage2D");
+    buffer = clCreateImage2DReal (context, flags, image_format, image_width, image_height, image_depth, image_row_pitch, image_slice_pitch, host_ptr, errcode_ret);
+    item = stat_item_new (buffer);
+    item->size = image_width * image_height * image_depth; /* FIXME: compute correct size */
+
+    G_LOCK (stat_data);
+    g_hash_table_insert (stat_data_state.buffers, buffer, item);
+    G_UNLOCK (stat_data);
+
+    return buffer;
+}
+
 cl_int
 clRetainMemObject (cl_mem memobj)
 {
