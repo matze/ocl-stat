@@ -3,7 +3,7 @@ LIBS = `pkg-config --libs glib-2.0`
 
 .PHONY: all clean
 
-all: libocl-stat.so
+all: libocl-stat.so stat-test
 
 clean:
 	rm -f libocl-stat.so ocl-stat.o
@@ -13,3 +13,6 @@ clean:
 
 libocl-stat.so: ocl-stat.o
 	$(CC) -shared -Wl,-soname,$@ -o $@ $^ -lc -ldl $(LIBS)
+
+stat-test: stat-test.c
+	$(CC) -o $@ $< -lOpenCL
